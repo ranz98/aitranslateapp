@@ -31,7 +31,8 @@ export default function AllUsers() {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
-        fetchUsers();
+        // Pass the 'user' object directly to the fetch function
+        fetchUsers(user);
       } else {
         router.replace('/');
       }
@@ -39,7 +40,8 @@ export default function AllUsers() {
     return () => unsubscribeAuth();
   }, []);
 
-  const fetchUsers = () => {
+  // Now accepts a 'user' parameter
+  const fetchUsers = (user: User) => {
     setLoading(true);
     // Fetch from a public 'users' collection
     const usersRef = collection(db, `/artifacts/${appId}/public/data/users`);
@@ -50,7 +52,8 @@ export default function AllUsers() {
         const usersList: AppUser[] = [];
         querySnapshot.forEach((doc) => {
           const userData = doc.data();
-          if (doc.id !== currentUser?.uid) {
+          // Use the passed 'user' object for comparison
+          if (doc.id !== user.uid) {
             usersList.push({
               uid: doc.id,
               displayName: userData.displayName,
@@ -73,20 +76,16 @@ export default function AllUsers() {
   const handleCreateChat = async (otherUser: AppUser) => {
     if (!currentUser) return;
     try {
-      // Key fix: Create a sorted array of members
       const members = [currentUser.uid, otherUser.uid].sort();
       const chatId = members.join('_');
 
       const chatsRef = collection(db, `/artifacts/${appId}/public/data/chats`);
-      // Key fix: Check if a chat with these members already exists
       const q = query(chatsRef, where('members', '==', members), limit(1));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        // If it exists, navigate to the existing chat
         router.push(`/chat?chatId=${querySnapshot.docs[0].id}`);
       } else {
-        // If not, create a new chat document with the members array
         const chatName = `${currentUser.displayName} & ${otherUser.displayName}`;
         const newChatDocRef = await addDoc(chatsRef, {
           members: members,
@@ -104,7 +103,7 @@ export default function AllUsers() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+<TouchableOpacity style={styles.backButton} onPress={() => router.replace('/chatlist')}>
           <Text style={styles.backButtonText}>{'<'}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Start a New Chat</Text>

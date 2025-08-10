@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore'; // Added doc and setDoc imports
 
-import { auth } from '@/utils/firebaseConfig';
+import { auth, db, appId } from '@/utils/firebaseConfig'; // Added db and appId imports
 
 export default function SignupPage() {
   const router = useRouter();
@@ -17,14 +18,25 @@ export default function SignupPage() {
     setError('');
     setLoading(true);
     try {
+      // 1. Create the user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      // After successful signup, update the user's profile with the provided name
-      await updateProfile(userCredential.user, {
+      const user = userCredential.user;
+
+      // 2. Update the user's profile with their display name
+      await updateProfile(user, {
         displayName: name,
       });
 
-      // User is automatically logged in and we can redirect
-      router.replace('/chat');
+      // 3. Save the user's details to the 'users' collection in Firestore
+      // This is crucial for the chat list and new chat features to work.
+      await setDoc(doc(db, `/artifacts/${appId}/public/data/users`, user.uid), {
+        displayName: name,
+        uid: user.uid,
+        email: user.email,
+      });
+
+      // Redirect to the new chat list page
+      router.replace('/chatlist');
     } catch (err: any) {
       setError(err.message || 'Failed to sign up.');
     } finally {
@@ -43,6 +55,7 @@ export default function SignupPage() {
           value={name}
           onChangeText={setName}
           autoCapitalize="words"
+          required
         />
         <TextInput
           style={styles.input}
@@ -52,6 +65,7 @@ export default function SignupPage() {
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          required
         />
         <TextInput
           style={styles.input}
@@ -60,6 +74,7 @@ export default function SignupPage() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          required
         />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <TouchableOpacity

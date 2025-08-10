@@ -17,7 +17,7 @@ export default function LoginPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
-        router.replace('/chat');
+        router.replace('/chatlist');
       }
     });
     return () => unsubscribe();
@@ -28,7 +28,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.replace('/chat');
+      router.replace('/chatlist');
     } catch (err: any) {
       setError(err.message || 'Failed to login. Please check your email and password.');
     } finally {

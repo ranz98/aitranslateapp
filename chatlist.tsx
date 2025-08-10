@@ -12,11 +12,11 @@ import { useRouter } from 'expo-router';
 
 import { auth, db, appId } from '@/utils/firebaseConfig';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore'; // ⬅️ Import 'where'
 
 type Chat = {
   id: string;
-  chatName: string; // Added new field for the chat's name
+  chatName: string;
   lastMessageText: string;
   lastMessageTimestamp: any;
 };
@@ -44,7 +44,13 @@ export default function ChatList() {
 
     setLoading(true);
     const chatsRef = collection(db, `/artifacts/${appId}/public/data/chats`);
-    const q = query(chatsRef, orderBy('lastMessageTimestamp', 'desc'));
+    
+    // ⬅️ FIX: Add a `where` clause to filter chats by the current user's UID
+    const q = query(
+      chatsRef,
+      where('members', 'array-contains', currentUser.uid), // ⬅️ Only get chats where the user is a member
+      orderBy('lastMessageTimestamp', 'desc')
+    );
 
     const unsubscribeChats = onSnapshot(
       q,
@@ -54,7 +60,7 @@ export default function ChatList() {
           const data = docSnap.data();
           chatList.push({
             id: docSnap.id,
-            chatName: data.chatName || 'Unnamed Chat', // Use chatName if available, otherwise default
+            chatName: data.chatName || 'Unnamed Chat',
             lastMessageText: data.lastMessageText || '',
             lastMessageTimestamp: data.lastMessageTimestamp || null,
           });
@@ -69,10 +75,8 @@ export default function ChatList() {
     );
 
     return () => unsubscribeChats();
-  }, [currentUser]);
-
-  // The 'New Chat' button now navigates to a page to select users,
-  // rather than creating a chat directly.
+  }, [currentUser]); // ⬅️ The useEffect hook now depends on `currentUser`
+  
   const handleNewChat = () => {
     router.push('/all-users');
   };
