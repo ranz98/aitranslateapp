@@ -13,7 +13,15 @@ import { useRouter } from 'expo-router';
 
 import { auth, db, appId } from '@/utils/firebaseConfig';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, onSnapshot, addDoc, serverTimestamp, getDocs, query, where, limit } from 'firebase/firestore';
+import {
+  collection,
+  onSnapshot,
+  addDoc,
+  serverTimestamp,
+  query,
+  where,
+  getDocs,
+} from 'firebase/firestore';
 
 type AppUser = {
   uid: string;
@@ -31,7 +39,6 @@ export default function AllUsers() {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
-        // Pass the 'user' object directly to the fetch function
         fetchUsers(user);
       } else {
         router.replace('/');
@@ -40,20 +47,17 @@ export default function AllUsers() {
     return () => unsubscribeAuth();
   }, []);
 
-  // Now accepts a 'user' parameter
   const fetchUsers = (user: User) => {
     setLoading(true);
-    // Fetch from a public 'users' collection
     const usersRef = collection(db, `/artifacts/${appId}/public/data/users`);
-    
+
     const unsubscribeUsers = onSnapshot(
       usersRef,
       (querySnapshot) => {
         const usersList: AppUser[] = [];
         querySnapshot.forEach((doc) => {
-          const userData = doc.data();
-          // Use the passed 'user' object for comparison
           if (doc.id !== user.uid) {
+            const userData = doc.data();
             usersList.push({
               uid: doc.id,
               displayName: userData.displayName,
@@ -75,26 +79,60 @@ export default function AllUsers() {
 
   const handleCreateChat = async (otherUser: AppUser) => {
     if (!currentUser) return;
-    try {
-      const members = [currentUser.uid, otherUser.uid].sort();
-      const chatId = members.join('_');
 
+    try {
       const chatsRef = collection(db, `/artifacts/${appId}/public/data/chats`);
-      const q = query(chatsRef, where('members', '==', members), limit(1));
+
+      // Query for chats that contain the current user
+      const q = query(
+        chatsRef,
+        where('members', 'array-contains', currentUser.uid)
+      );
+
       const querySnapshot = await getDocs(q);
 
-      if (!querySnapshot.empty) {
-        router.push(`/chat?chatId=${querySnapshot.docs[0].id}`);
-      } else {
-        const chatName = `${currentUser.displayName} & ${otherUser.displayName}`;
-        const newChatDocRef = await addDoc(chatsRef, {
-          members: members,
-          chatName: chatName,
-          lastMessageText: 'New chat created!',
-          lastMessageTimestamp: serverTimestamp(),
-        });
-        router.push(`/chat?chatId=${newChatDocRef.id}`);
+      let existingChatId: string | null = null;
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        const members: string[] = Array.isArray(data.members) ? data.members : [];
+        // Check if chat has exactly these two members
+        if (
+          members.length === 2 &&
+          members.includes(currentUser.uid) &&
+          members.includes(otherUser.uid)
+        ) {
+          existingChatId = doc.id;
+        }
+      });
+
+      if (existingChatId) {
+        console.log('Existing chat found:', existingChatId);
+        router.push(`/chat?chatId=${existingChatId}`);
+        return;
       }
+
+      // No existing chat found, create new one
+      const members = [currentUser.uid, otherUser.uid].sort();
+      const chatName = `${currentUser.displayName || 'You'} & ${otherUser.displayName || 'User'}`;
+
+      console.log('Creating new chat with members:', members);
+
+      const newChatDocRef = await addDoc(chatsRef, {
+        members,
+        chatName,
+        lastMessageText: '',
+        lastMessageTimestamp: serverTimestamp(),
+      });
+
+      // Add initial "Chat started" message
+      const messagesRef = collection(db, `/artifacts/${appId}/public/data/chats/${newChatDocRef.id}/messages`);
+      await addDoc(messagesRef, {
+        text: 'Chat started',
+        senderId: currentUser.uid,
+        timestamp: serverTimestamp(),
+      });
+
+      router.push(`/chat?chatId=${newChatDocRef.id}`);
     } catch (error) {
       console.error('Error creating chat:', error);
     }
@@ -103,11 +141,12 @@ export default function AllUsers() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-<TouchableOpacity style={styles.backButton} onPress={() => router.replace('/chatlist')}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/chatlist')}>
           <Text style={styles.backButtonText}>{'<'}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Start a New Chat</Text>
       </View>
+
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#075E54" />
@@ -119,7 +158,10 @@ export default function AllUsers() {
           keyExtractor={(item) => item.uid}
           renderItem={({ item }) => (
             <TouchableOpacity style={styles.userItem} onPress={() => handleCreateChat(item)}>
-              <Image source={{ uri: item.photoURL || 'https://i.pravatar.cc/150?img=12' }} style={styles.avatar} />
+              <Image
+                source={{ uri: item.photoURL || 'https://i.pravatar.cc/150?img=12' }}
+                style={styles.avatar}
+              />
               <Text style={styles.userName}>{item.displayName || 'Unnamed User'}</Text>
             </TouchableOpacity>
           )}
