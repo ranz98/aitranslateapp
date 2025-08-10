@@ -84,7 +84,8 @@ export default function ChatScreen() {
 
     setLoading(true);
 
-    const messagesRef = collection(db, `/artifacts/${appId}/public/data/messages`);
+    // Corrected Firestore path
+    const messagesRef = collection(db, `/artifacts/${appId}/public/data/chats/general_chat/messages`);
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
     const unsubscribeFirestore = onSnapshot(
@@ -123,7 +124,8 @@ export default function ChatScreen() {
   const sendMessage = async () => {
     if (!input.trim() || !currentUser) return;
     try {
-      await addDoc(collection(db, `/artifacts/${appId}/public/data/messages`), {
+      // Corrected Firestore path
+      await addDoc(collection(db, `/artifacts/${appId}/public/data/chats/general_chat/messages`), {
         text: input.trim(),
         userId: currentUser.uid,
         userName: currentUser.displayName || 'Guest', // Save the display name
@@ -152,8 +154,8 @@ export default function ChatScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/')}>
-              <Text style={styles.backButtonText}>{'<'}</Text>
+<TouchableOpacity style={styles.backButton} onPress={() => router.replace('/chatlist')}>
+                <Text style={styles.backButtonText}>{'<'}</Text>
             </TouchableOpacity>
             <View>
               <ThemedText style={styles.headerText}>Logged in as: {currentUser?.displayName || 'Guest'}</ThemedText>
