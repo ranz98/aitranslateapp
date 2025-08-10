@@ -21,7 +21,8 @@ import {
   query,
   where,
   getDocs,
-} from 'firebase/firestore';
+}
+from 'firebase/firestore';
 
 type AppUser = {
   uid: string;
@@ -83,7 +84,6 @@ export default function AllUsers() {
     try {
       const chatsRef = collection(db, `/artifacts/${appId}/public/data/chats`);
 
-      // Query for chats that contain the current user
       const q = query(
         chatsRef,
         where('members', 'array-contains', currentUser.uid)
@@ -95,7 +95,6 @@ export default function AllUsers() {
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         const members: string[] = Array.isArray(data.members) ? data.members : [];
-        // Check if chat has exactly these two members
         if (
           members.length === 2 &&
           members.includes(currentUser.uid) &&
@@ -106,25 +105,21 @@ export default function AllUsers() {
       });
 
       if (existingChatId) {
-        console.log('Existing chat found:', existingChatId);
         router.push(`/chat?chatId=${existingChatId}`);
         return;
       }
 
-      // No existing chat found, create new one
       const members = [currentUser.uid, otherUser.uid].sort();
-      const chatName = `${currentUser.displayName || 'You'} & ${otherUser.displayName || 'User'}`;
-
-      console.log('Creating new chat with members:', members);
-
+      //const chatName = `${currentUser.displayName || 'You'} & ${otherUser.displayName || 'User'}`;
+      const chatName = `${otherUser.displayName || 'User'}`;
+      // FIX: Add initial lastMessageText and lastMessageTimestamp here
       const newChatDocRef = await addDoc(chatsRef, {
         members,
         chatName,
-        lastMessageText: '',
+        lastMessageText: 'Chat started',
         lastMessageTimestamp: serverTimestamp(),
       });
 
-      // Add initial "Chat started" message
       const messagesRef = collection(db, `/artifacts/${appId}/public/data/chats/${newChatDocRef.id}/messages`);
       await addDoc(messagesRef, {
         text: 'Chat started',
@@ -146,7 +141,6 @@ export default function AllUsers() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Start a New Chat</Text>
       </View>
-
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#075E54" />

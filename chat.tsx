@@ -26,6 +26,8 @@ import {
   orderBy,
   DocumentData,
   CollectionReference,
+  doc,
+  updateDoc,
 } from 'firebase/firestore';
 
 type Sender = 'me' | 'other';
@@ -158,6 +160,7 @@ export default function ChatScreen() {
   const sendMessage = async () => {
     if (!input.trim() || !currentUser || !chatId) return;
     try {
+      // Step 1: Add the new message to the messages subcollection
       await addDoc(
         collection(
           db,
@@ -176,6 +179,14 @@ export default function ChatScreen() {
           timestamp: serverTimestamp(),
         }
       );
+      
+      // Step 2: Update the parent chat document with the last message details
+      const chatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', String(chatId));
+      await updateDoc(chatRef, {
+        lastMessageText: input.trim(),
+        lastMessageTimestamp: serverTimestamp(),
+      });
+      
       setInput('');
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });

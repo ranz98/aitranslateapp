@@ -14,7 +14,15 @@ import { useRouter } from 'expo-router';
 
 import { auth, db, appId } from '@/utils/firebaseConfig';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import {
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+  where,
+  serverTimestamp,
+  getDocs,
+} from 'firebase/firestore';
 
 type Chat = {
   id: string;
@@ -34,14 +42,14 @@ export default function ChatList() {
 
   const router = useRouter();
 
-  // Load cached chats from AsyncStorage on mount
+  // Load cached chats on mount
   useEffect(() => {
     const loadCachedChats = async () => {
       try {
         const cached = await AsyncStorage.getItem(STORAGE_KEY);
         if (cached) {
           setChats(JSON.parse(cached));
-          setLoading(false); // stop loading because we have cached data
+          setLoading(false);
         }
       } catch (e) {
         console.warn('Failed to load cached chats:', e);
@@ -50,7 +58,7 @@ export default function ChatList() {
     loadCachedChats();
   }, []);
 
-  // Handle Auth State
+  // Listen for auth changes
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -63,15 +71,16 @@ export default function ChatList() {
     return () => unsubscribeAuth();
   }, []);
 
-  // Fetch chats and listen real-time
+  // Real-time listener for chats where currentUser is member
   useEffect(() => {
-    if (authLoading) return;
-    if (!currentUser) return;
+    if (authLoading || !currentUser) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
 
     const chatsRef = collection(db, `/artifacts/${appId}/public/data/chats`);
-
     const q = query(
       chatsRef,
       where('members', 'array-contains', currentUser.uid),
@@ -84,18 +93,12 @@ export default function ChatList() {
         const chatList: Chat[] = [];
         querySnapshot.forEach((docSnap) => {
           const data = docSnap.data();
-
-          // If timestamp missing, skip or set fallback (here we skip)
-          if (!data.lastMessageTimestamp) {
-            console.warn(`Chat doc ${docSnap.id} missing lastMessageTimestamp, skipping`);
-            return;
-          }
-
+          const lastMsgTimestamp = data.lastMessageTimestamp || serverTimestamp();
           chatList.push({
             id: docSnap.id,
             chatName: data.chatName || 'Unnamed Chat',
             lastMessageText: data.lastMessageText || '',
-            lastMessageTimestamp: data.lastMessageTimestamp,
+            lastMessageTimestamp: lastMsgTimestamp,
           });
         });
 
@@ -103,7 +106,7 @@ export default function ChatList() {
         setLoading(false);
         setRefreshing(false);
 
-        // Cache chats locally
+        // Cache to AsyncStorage
         try {
           await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(chatList));
         } catch (e) {
@@ -119,6 +122,55 @@ export default function ChatList() {
 
     return () => unsubscribeChats();
   }, [currentUser, authLoading]);
+
+  // Manual fetch for Refresh button / pull-to-refresh
+  const fetchChatsOnce = useCallback(async () => {
+    if (!currentUser) return;
+
+    setRefreshing(true);
+    try {
+      const chatsRef = collection(db, `/artifacts/${appId}/public/data/chats`);
+      const q = query(
+        chatsRef,
+        where('members', 'array-contains', currentUser.uid),
+        orderBy('lastMessageTimestamp', 'desc')
+      );
+
+      const querySnapshot = await getDocs(q);
+      const chatList: Chat[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const lastMsgTimestamp = data.lastMessageTimestamp || serverTimestamp();
+        chatList.push({
+          id: docSnap.id,
+          chatName: data.chatName || 'Unnamed Chat',
+          lastMessageText: data.lastMessageText || '',
+          lastMessageTimestamp: lastMsgTimestamp,
+        });
+      });
+
+      setChats(chatList);
+
+      // Cache to AsyncStorage
+      try {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(chatList));
+      } catch (e) {
+        console.warn('Failed to cache chats:', e);
+      }
+    } catch (error) {
+      console.error('Refresh fetch failed:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [currentUser]);
+
+  const onRefresh = useCallback(() => {
+    fetchChatsOnce();
+  }, [fetchChatsOnce]);
+
+  const handleButtonRefresh = useCallback(() => {
+    fetchChatsOnce();
+  }, [fetchChatsOnce]);
 
   const handleNewChat = () => {
     router.push('/all-users');
@@ -138,17 +190,15 @@ export default function ChatList() {
     }
   };
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    // Because onSnapshot handles updates in real-time,
-    // just toggling refreshing will suffice.
-  }, []);
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Your Chats</Text>
         <View style={styles.headerRight}>
+          {/* Refresh Button */}
+          <TouchableOpacity onPress={handleButtonRefresh} style={styles.headerButton}>
+            <Text style={styles.buttonText}>Refresh</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleNewChat} style={styles.headerButton}>
             <Text style={styles.buttonText}>New Chat</Text>
           </TouchableOpacity>
